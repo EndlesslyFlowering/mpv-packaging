@@ -81,7 +81,7 @@ function Download-Ytplugin ($plugin, $version) {
             Write-Host "Downloading $plugin ($version)" -ForegroundColor Green
             $32bit = ""
             if (-Not (Test-Path (Join-Path $env:windir "SysWow64"))) {
-                $32bit = "_x86"
+                throw "32bit architectures are not supported!"
             }
             $link = -join("https://github.com/yt-dlp/yt-dlp/releases/download/", $version, "/", $plugin, $32bit, ".exe")
             $plugin_exe = -join($plugin, $32bit, ".exe")
@@ -106,28 +106,13 @@ function Get-Latest-Mpv($Arch, $channel) {
     $download_link = ""
     switch -wildcard ($channel) {
         "daily" {
-            $api_gh = "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest"
+            $api_gh = "https://api.github.com/repos/EndlesslyFlowering/mpv-winbuild-cmake/releases/latest"
             $json = Invoke-WebRequest $api_gh -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing | ConvertFrom-Json
             $filename = $json.assets | where { $_.name -Match "mpv-$Arch" } | Select-Object -ExpandProperty name
             $download_link = $json.assets | where { $_.name -Match "mpv-$Arch" } | Select-Object -ExpandProperty browser_download_url
         }
-        "weekly" {
-            $i686_link = "https://sourceforge.net/projects/mpv-player-windows/rss?path=/32bit"
-            $x86_64_link = "https://sourceforge.net/projects/mpv-player-windows/rss?path=/64bit"
-            $x86_64v3_link = "https://sourceforge.net/projects/mpv-player-windows/rss?path=/64bit-v3"
-            $rss_link = ''
-            switch ($Arch)
-            {
-                i686 { $rss_link = $i686_link}
-                x86_64 { $rss_link = $x86_64_link }
-                x86_64-v3 { $rss_link = $x86_64v3_link }
-            }
-            Write-Host "Fetching RSS feed for mpv" -ForegroundColor Green
-            $result = [xml](New-Object System.Net.WebClient).DownloadString($rss_link)
-            $latest = $result.rss.channel.item.link[0]
-            $tempname = $latest.split("/")[-2]
-            $filename = [System.Uri]::UnescapeDataString($tempname)
-            $download_link = "https://download.sourceforge.net/mpv-player-windows/" + $filename
+        default {
+            throw "Only daily channel is supported for this release!"
         }
     }
     if ($filename -is [array]) {
@@ -160,7 +145,7 @@ function Get-Latest-Ytplugin ($plugin) {
 }
 
 function Get-Latest-FFmpeg ($Arch) {
-    $api_gh = "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest"
+    $api_gh = "https://api.github.com/repos/EndlesslyFlowering/mpv-winbuild-cmake/releases/latest"
     $json = Invoke-WebRequest $api_gh -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing | ConvertFrom-Json
     $filename = $json.assets | where { $_.name -Match "ffmpeg-$Arch" } | Select-Object -ExpandProperty name
     $download_link = $json.assets | where { $_.name -Match "ffmpeg-$Arch" } | Select-Object -ExpandProperty browser_download_url
@@ -246,21 +231,10 @@ function Create-XML {
 }
 
 function Check-ChannelRelease {
-    $channel = ""
+    $channel = "daily"
     $file = "settings.xml"
 
     if (-not (Test-Path $file)) {
-        $result = Read-KeyOrTimeout "Choose mpv updates frequency, weekly or daily? [1=weekly/2=daily] (default=1)" "D1"
-        Write-Host ""
-        if ($result -eq 'D1') {
-            $channel = "weekly"
-        }
-        elseif ($result -eq 'D2') {
-            $channel = "daily"
-        }
-        else {
-            throw "Please enter valid input key."
-        }
         Create-XML
         [xml]$doc = Get-Content $file
         $doc.settings.channel = $channel
@@ -268,7 +242,8 @@ function Check-ChannelRelease {
     }
     else {
         [xml]$doc = Get-Content $file
-        $channel = $doc.settings.channel
+        $doc.settings.channel = $channel
+        $doc.Save($file)
     }
     return $channel
 }
@@ -281,20 +256,10 @@ function Check-Arch($arch) {
     [xml]$doc = Get-Content $file
     if ($doc.settings.arch -eq "unset") {
         if ($arch -eq "i686") {
-            $get_arch = "i686"
+            throw "32bit architectures are not supported!"
         }
         else {
-            $result = Read-KeyOrTimeout "Choose variant for 64bit builds: x86_64 or x86_64-v3 (for cpu with AVX2 support) [1=x86_64 / 2=x86_64-v3 (default=1)" "D1"
-            Write-Host ""
-            if ($result -eq 'D1') {
-                $get_arch = "x86_64"
-            }
-            elseif ($result -eq 'D2') {
-                $get_arch = "x86_64-v3"
-            }
-            else {
-                throw "Please enter valid input key."
-            }
+            $get_arch = "x86_64-znver3"
         }
         $doc.settings.arch = $get_arch
         $doc.Save($file)
@@ -407,8 +372,7 @@ function Upgrade-Mpv {
                 $original_arch = "x86_64"
             }
             else {
-                Write-Host "Detecting System Type is 32-bit" -ForegroundColor Green
-                $original_arch = "i686"
+                throw "32bit architectures are not supported!"
             }
             $channel = Check-ChannelRelease
             $arch = Check-Arch $original_arch
@@ -480,7 +444,7 @@ function Upgrade-FFmpeg {
         $arch = Check-Arch $original_arch
     }
     else {
-        $arch = "i686"
+        throw "32bit architectures are not supported!"
     }
 
     $need_download = $false
