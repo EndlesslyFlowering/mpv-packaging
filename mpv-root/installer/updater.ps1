@@ -259,7 +259,20 @@ function Check-Arch($arch) {
             throw "32bit architectures are not supported!"
         }
         else {
-            $get_arch = "x86_64-znver3"
+            $result = Read-KeyOrTimeout "Choose variant for 64bit builds: x86_64-znver3, x86_64-znver4 or x86_64-znver5 [1=x86_64-znver3 / 2=x86_64-znver4 / 2=x86_64-znver5 (default=1)" "D1"
+            Write-Host ""
+            if ($result -eq 'D1') {
+                $get_arch = "x86_64-znver3"
+            }
+            elseif ($result -eq 'D2') {
+                $get_arch = "x86_64-znver4"
+            }
+            elseif ($result -eq 'D3') {
+                $get_arch = "x86_64-znver5"
+            }
+            else {
+                throw "Please enter valid input key."
+            }
         }
         $doc.settings.arch = $get_arch
         $doc.Save($file)
