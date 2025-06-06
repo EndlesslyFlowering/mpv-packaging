@@ -42,12 +42,8 @@ function Check-PowershellVersion {
 
 function Check-Ytplugin {
     $ytdlp = Get-ChildItem "yt-dlp*.exe" -ErrorAction Ignore
-    $youtubedl = Get-ChildItem "youtube-dl.exe" -ErrorAction Ignore
     if ($ytdlp) {
         return $ytdlp.ToString()
-    }
-    elseif ($youtubedl) {
-        return $youtubedl.ToString()
     }
     else {
         return $null
@@ -56,9 +52,6 @@ function Check-Ytplugin {
 
 function Check-Ytplugin-In-System {
     $ytp = Get-Command -CommandType Application -ErrorAction Ignore yt-dlp.exe | Select-Object -Last 1
-    if (-not $ytp) {
-        $ytp = Get-Command -CommandType Application -ErrorAction Ignore youtube-dl.exe | Select-Object -Last 1
-    }
     return [bool]($ytp -and ((Split-Path $ytp.Source) -ne (Get-Location)))
 }
 
@@ -73,25 +66,14 @@ function Download-Archive ($filename, $link) {
     Invoke-WebRequest -Uri $link -UserAgent $useragent -OutFile $filename
 }
 
-function Download-Ytplugin ($plugin, $version) {
-    $link = ""
-    $plugin_exe = ""
-    switch -wildcard ($plugin) {
-        "yt-dlp*" {
-            Write-Host "Downloading $plugin ($version)" -ForegroundColor Green
-            $32bit = ""
-            if (-Not (Test-Path (Join-Path $env:windir "SysWow64"))) {
-                throw "32bit architectures are not supported!"
-            }
-            $link = -join("https://github.com/yt-dlp/yt-dlp/releases/download/", $version, "/", $plugin, $32bit, ".exe")
-            $plugin_exe = -join($plugin, $32bit, ".exe")
-        }
-        "youtube-dl" {
-            Write-Host "Downloading $plugin ($version)" -ForegroundColor Green
-            $link = -join("https://yt-dl.org/downloads/", $version, "/youtube-dl.exe")
-            $plugin_exe = "youtube-dl.exe"
-        }
+function Download-Ytplugin ($version) {
+    $plugin = "yt-dlp"
+    Write-Host "Downloading $plugin ($version)" -ForegroundColor Green
+    if (-Not (Test-Path (Join-Path $env:windir "SysWow64"))) {
+        throw "32bit architectures are not supported!"
     }
+    $link = -join("https://github.com/yt-dlp/yt-dlp/releases/download/", $version, "/", $plugin, ".exe")
+    $plugin_exe = -join($plugin, ".exe")
     Invoke-WebRequest -Uri $link -UserAgent $useragent -OutFile $plugin_exe
 }
 
@@ -123,25 +105,13 @@ function Get-Latest-Mpv($Arch, $channel) {
     }
 }
 
-function Get-Latest-Ytplugin ($plugin) {
-    switch -wildcard ($plugin) {
-        "yt-dlp*" {
-            $link = "https://github.com/yt-dlp/yt-dlp/releases.atom"
-            Write-Host "Fetching RSS feed for ytp-dlp" -ForegroundColor Green
-            $resp = [xml](Invoke-WebRequest $link -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing).Content
-            $link = $resp.feed.entry[0].link.href
-            $version = $link.split("/")[-1]
-            return $version
-        }
-        "youtube-dl" {
-            $link = "https://yt-dl.org/downloads/latest/youtube-dl.exe"
-            Write-Host "Fetching RSS feed for youtube-dl" -ForegroundColor Green
-            $resp = Invoke-WebRequest $link -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing
-            $redirect_link = $resp.Headers.Location
-            $version = $redirect_link.split("/")[4]
-            return $version
-        }
-    }
+function Get-Latest-Ytplugin {
+    $link = "https://github.com/yt-dlp/yt-dlp/releases.atom"
+    Write-Host "Fetching RSS feed for yt-dlp" -ForegroundColor Green
+    $resp = [xml](Invoke-WebRequest $link -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing).Content
+    $link = $resp.feed.entry[0].link.href
+    $version = $link.split("/")[-1]
+    return $version
 }
 
 function Get-Latest-FFmpeg ($Arch) {
@@ -409,12 +379,12 @@ function Upgrade-Mpv {
 
 function Upgrade-Ytplugin {
     if (Check-Ytplugin-In-System) {
-        Write-Host "yt-dlp.exe or youtube-dl.exe already exists in your system, skip the update check." -ForegroundColor Green
+        Write-Host "yt-dlp.exe already exists in your system, skip the update check." -ForegroundColor Green
         return
     }
     $yt = Check-Ytplugin
     if ($yt) {
-        $latest_release = Get-Latest-Ytplugin((Get-Item $yt).BaseName)
+        $latest_release = Get-Latest-Ytplugin
         if ((& $yt --version) -match ($latest_release)) {
             Write-Host "You are already using latest" (Get-Item $yt).BaseName "-- $latest_release" -ForegroundColor Green
         }
@@ -424,24 +394,13 @@ function Upgrade-Ytplugin {
         }
     }
     else {
-        Write-Host "ytdlp or youtube-dl doesn't exist. " -ForegroundColor Green -NoNewline
+        Write-Host "yt-dlp doesn't exist." -ForegroundColor Green -NoNewline
         $result = Read-KeyOrTimeout "Proceed with downloading? [Y/n] (default=n)" "N"
         Write-Host ""
 
         if ($result -eq 'Y') {
-            $result_exe = Read-KeyOrTimeout "Download ytdlp or youtubedl? [1=ytdlp/2=youtubedl] (default=1)" "D1"
-            Write-Host ""
-            if ($result_exe -eq 'D1') {
-                $latest_release = Get-Latest-Ytplugin "yt-dlp"
-                Download-Ytplugin "yt-dlp" $latest_release
-            }
-            elseif ($result_exe -eq 'D2') {
-                $latest_release = Get-Latest-Ytplugin "youtube-dl"
-                Download-Ytplugin "youtube-dl" $latest_release
-            }
-            else {
-                throw "Please enter valid input key."
-            }
+            $latest_release = Get-Latest-Ytplugin
+            Download-Ytplugin $latest_release
         }
     }
 }
