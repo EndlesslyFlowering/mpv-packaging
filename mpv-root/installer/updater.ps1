@@ -16,6 +16,10 @@ If so:
     throw
 }
 
+function Settings-File-Does-Not-Exist {
+    throw "'settings.xml' does not exist! Please report this error, Thank You."
+}
+
 function Get-7z {
     $7z_command = Get-Command -CommandType Application -ErrorAction Ignore 7z.exe | Select-Object -Last 1
     if ($7z_command) {
@@ -193,7 +197,9 @@ function Check-Arch {
     $get_arch = ""
     $file = "settings.xml"
 
-    if (-not (Test-Path $file)) { exit }
+    if (-not (Test-Path $file)) {
+        Settings-File-Does-Not-Exist
+    }
     [xml]$doc = Get-Content $file
     if ($doc.settings.arch -eq "unset") {
         $result = Read-KeyOrTimeout "Choose variant for 64bit builds: x86_64-znver3, x86_64-znver4 or x86_64-znver5 [1=x86_64-znver3 / 2=x86_64-znver4 / 3=x86_64-znver5 (default=1)" "D1"
@@ -223,7 +229,9 @@ function Check-Autodelete($archive) {
     $autodelete = ""
     $file = "settings.xml"
 
-    if (-not (Test-Path $file)) { exit }
+    if (-not (Test-Path $file)) {
+        Settings-File-Does-Not-Exist
+    }
     [xml]$doc = Get-Content $file
     if ($doc.settings.autodelete -eq "unset") {
         $result = Read-KeyOrTimeout "Delete archives after extract? [Y/n] (default=Y)" "Y"
@@ -252,7 +260,9 @@ function Check-GetFFmpeg() {
     $get_ffmpeg = ""
     $file = "settings.xml"
 
-    if (-not (Test-Path $file)) { exit }
+    if (-not (Test-Path $file)) {
+        Settings-File-Does-Not-Exist
+    }
     [xml]$doc = Get-Content $file
     if ($doc.settings.getffmpeg -eq "unset") {
         Write-Host "FFmpeg doesn't exist. " -ForegroundColor Green -NoNewline
