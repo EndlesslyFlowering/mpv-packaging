@@ -1,6 +1,21 @@
 $fallback7z = Join-Path (Get-Location) "\7z\7zr.exe";
 $useragent = "mpv-win-updater"
 
+function Wrong-Arch($exe) {
+    $fail_string = @"
+It seems like $exe could not be run... Are you on the wrong arch?
+If so:
+- download the 7zip archive matching your CPU arch from 'https://api.github.com/repos/EndlesslyFlowering/mpv-winbuild-cmake/releases/latest'
+- extract all the files from the archive into this folder and override all files
+- delete the 'settings.xml' file
+- rerun the 'updater.bat' file
+- choose the correct CPU arch this time
+"@
+    Write-Host $fail_string -ForegroundColor Red
+    cmd /c pause
+    throw
+}
+
 function Get-7z {
     $7z_command = Get-Command -CommandType Application -ErrorAction Ignore 7z.exe | Select-Object -Last 1
     if ($7z_command) {
@@ -120,9 +135,14 @@ function Get-Latest-FFmpeg ($Arch) {
 
 function ExtractGitFromFile {
     $stripped = .\mpv --no-config | select-string "mpv" | select-object -First 1
-    $pattern = "-g([a-z0-9-]{7})"
-    $bool = $stripped -match $pattern
-    return $matches[1]
+    if ($stripped) {
+        $pattern = "-g([a-z0-9-]{7})"
+        $bool = $stripped -match $pattern
+        return $matches[1]
+    }
+    else {
+        Wrong-Arch "mpv"
+    }
 }
 
 function ExtractGitFromURL($filename) {
@@ -368,22 +388,27 @@ function Upgrade-FFmpeg {
 
     if ($ffmpeg_exist) {
         $ffmpeg_file = .\ffmpeg -version | select-string "ffmpeg" | select-object -First 1
-        $file_pattern_1 = "git-[0-9]{4}-[0-9]{2}-[0-9]{2}-(?<commit>[a-z0-9]+)" # git-2023-01-02-cc2b1a325
-        $file_pattern_2 = "N-\d+-g(?<commit>[a-z0-9]+)"                         # N-109751-g9a820ec8b
-        $file_pattern = $file_pattern_1, $file_pattern_2 -join '|'
-        $url_pattern = "git-([a-z0-9]+)"
-        $file_match= [Regex]::Matches($ffmpeg_file, $file_pattern)
-        $remote_match = [Regex]::Matches($remote_name, $url_pattern)
-        $local_git = $file_match[0].groups['commit'].value
-        $remote_git = $remote_match[0].groups[1].value
+        if ($ffmpeg_file) {
+            $file_pattern_1 = "git-[0-9]{4}-[0-9]{2}-[0-9]{2}-(?<commit>[a-z0-9]+)" # git-2023-01-02-cc2b1a325
+            $file_pattern_2 = "N-\d+-g(?<commit>[a-z0-9]+)"                         # N-109751-g9a820ec8b
+            $file_pattern = $file_pattern_1, $file_pattern_2 -join '|'
+            $url_pattern = "git-([a-z0-9]+)"
+            $file_match= [Regex]::Matches($ffmpeg_file, $file_pattern)
+            $remote_match = [Regex]::Matches($remote_name, $url_pattern)
+            $local_git = $file_match[0].groups['commit'].value
+            $remote_git = $remote_match[0].groups[1].value
 
-        if ($local_git -match $remote_git) {
-            Write-Host "You are already using latest ffmpeg build -- $remote_name" -ForegroundColor Green
-            $need_download = $false
+            if ($local_git -match $remote_git) {
+                Write-Host "You are already using latest ffmpeg build -- $remote_name" -ForegroundColor Green
+                $need_download = $false
+            }
+            else {
+                Write-Host "Newer ffmpeg build available" -ForegroundColor Green
+                $need_download = $true
+            }
         }
         else {
-            Write-Host "Newer ffmpeg build available" -ForegroundColor Green
-            $need_download = $true
+            Wrong-Arch "ffmpeg"
         }
     }
     else {
