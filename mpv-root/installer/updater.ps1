@@ -83,20 +83,11 @@ function Extract-Archive ($file) {
     & $7z x -y $file
 }
 
-function Get-Latest-Mpv($Arch, $channel) {
-    $filename = ""
-    $download_link = ""
-    switch -wildcard ($channel) {
-        "daily" {
-            $api_gh = "https://api.github.com/repos/EndlesslyFlowering/mpv-winbuild-cmake/releases/latest"
-            $json = Invoke-WebRequest $api_gh -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing | ConvertFrom-Json
-            $filename = $json.assets | where { $_.name -Match "mpv-$Arch" } | Select-Object -ExpandProperty name
-            $download_link = $json.assets | where { $_.name -Match "mpv-$Arch" } | Select-Object -ExpandProperty browser_download_url
-        }
-        default {
-            throw "Only daily channel is supported for this release!"
-        }
-    }
+function Get-Latest-Mpv($Arch) {
+    $api_gh = "https://api.github.com/repos/EndlesslyFlowering/mpv-winbuild-cmake/releases/latest"
+    $json = Invoke-WebRequest $api_gh -MaximumRedirection 0 -ErrorAction Ignore -UseBasicParsing | ConvertFrom-Json
+    $filename = $json.assets | where { $_.name -Match "mpv-$Arch" } | Select-Object -ExpandProperty name
+    $download_link = $json.assets | where { $_.name -Match "mpv-$Arch" } | Select-Object -ExpandProperty browser_download_url
     if ($filename -is [array]) {
         return $filename[0], $download_link[0]
     }
@@ -163,7 +154,6 @@ function Test-Admin
 function Create-XML {
 @"
 <settings>
-  <channel>unset</channel>
   <arch>unset</arch>
   <autodelete>unset</autodelete>
   <getffmpeg>unset</getffmpeg>
@@ -171,49 +161,34 @@ function Create-XML {
 "@ | Set-Content "settings.xml" -Encoding UTF8
 }
 
-function Check-ChannelRelease {
-    $channel = "daily"
+function Check-XmlFileExist {
     $file = "settings.xml"
 
     if (-not (Test-Path $file)) {
         Create-XML
-        [xml]$doc = Get-Content $file
-        $doc.settings.channel = $channel
-        $doc.Save($file)
     }
-    else {
-        [xml]$doc = Get-Content $file
-        $doc.settings.channel = $channel
-        $doc.Save($file)
-    }
-    return $channel
 }
 
-function Check-Arch($arch) {
+function Check-Arch {
     $get_arch = ""
     $file = "settings.xml"
 
     if (-not (Test-Path $file)) { exit }
     [xml]$doc = Get-Content $file
     if ($doc.settings.arch -eq "unset") {
-        if ($arch -eq "i686") {
-            throw "32bit architectures are not supported!"
+        $result = Read-KeyOrTimeout "Choose variant for 64bit builds: x86_64-znver3, x86_64-znver4 or x86_64-znver5 [1=x86_64-znver3 / 2=x86_64-znver4 / 3=x86_64-znver5 (default=1)" "D1"
+        Write-Host ""
+        if ($result -eq 'D1') {
+            $get_arch = "x86_64-znver3"
+        }
+        elseif ($result -eq 'D2') {
+            $get_arch = "x86_64-znver4"
+        }
+        elseif ($result -eq 'D3') {
+            $get_arch = "x86_64-znver5"
         }
         else {
-            $result = Read-KeyOrTimeout "Choose variant for 64bit builds: x86_64-znver3, x86_64-znver4 or x86_64-znver5 [1=x86_64-znver3 / 2=x86_64-znver4 / 3=x86_64-znver5 (default=1)" "D1"
-            Write-Host ""
-            if ($result -eq 'D1') {
-                $get_arch = "x86_64-znver3"
-            }
-            elseif ($result -eq 'D2') {
-                $get_arch = "x86_64-znver4"
-            }
-            elseif ($result -eq 'D3') {
-                $get_arch = "x86_64-znver5"
-            }
-            else {
-                throw "Please enter valid input key."
-            }
+            throw "Please enter valid input key."
         }
         $doc.settings.arch = $get_arch
         $doc.Save($file)
@@ -286,13 +261,11 @@ function Upgrade-Mpv {
     $remoteName = ""
     $download_link = ""
     $arch = ""
-    $channel = ""
 
     if (Check-Mpv) {
-        $channel = Check-ChannelRelease
-        $file_arch = "x86_64"
-        $arch = Check-Arch $file_arch
-        $remoteName, $download_link = Get-Latest-Mpv $arch $channel
+        Check-XmlFileExist
+        $arch = Check-Arch
+        $remoteName, $download_link = Get-Latest-Mpv $arch
         $localgit = ExtractGitFromFile
         $localdate = ExtractDateFromFile
         $remotegit = ExtractGitFromURL $remoteName
@@ -323,14 +296,13 @@ function Upgrade-Mpv {
             $need_download = $true
             if (Test-Path (Join-Path $env:windir "SysWow64")) {
                 Write-Host "Detecting System Type is 64-bit" -ForegroundColor Green
-                $original_arch = "x86_64"
             }
             else {
                 throw "32bit architectures are not supported!"
             }
-            $channel = Check-ChannelRelease
-            $arch = Check-Arch $original_arch
-            $remoteName, $download_link = Get-Latest-Mpv $arch $channel
+            Check-XmlFileExist
+            $arch = Check-Arch
+            $remoteName, $download_link = Get-Latest-Mpv $arch
         }
         elseif ($result -eq 'N') {
             $need_download = $false
@@ -383,8 +355,7 @@ function Upgrade-FFmpeg {
     }
 
     if (Test-Path (Join-Path $env:windir "SysWow64")) {
-        $original_arch = "x86_64"
-        $arch = Check-Arch $original_arch
+        $arch = Check-Arch
     }
     else {
         throw "32bit architectures are not supported!"
