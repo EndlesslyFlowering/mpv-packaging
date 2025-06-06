@@ -127,35 +127,6 @@ function Get-Latest-FFmpeg ($Arch) {
     }
 }
 
-function Get-Arch {
-    # Reference: http://superuser.com/a/891443
-    $FilePath = [System.IO.Path]::Combine((Get-Location).Path, 'mpv.exe')
-    [int32]$MACHINE_OFFSET = 4
-    [int32]$PE_POINTER_OFFSET = 60
-
-    [byte[]]$data = New-Object -TypeName System.Byte[] -ArgumentList 4096
-    $stream = New-Object -TypeName System.IO.FileStream -ArgumentList ($FilePath, 'Open', 'Read')
-    $stream.Read($data, 0, 4096) | Out-Null
-
-    # DOS header is 64 bytes, last element, long (4 bytes) is the address of the PE header
-    [int32]$PE_HEADER_ADDR = [System.BitConverter]::ToInt32($data, $PE_POINTER_OFFSET)
-    [int32]$machineUint = [System.BitConverter]::ToUInt16($data, $PE_HEADER_ADDR + $MACHINE_OFFSET)
-
-    $result = "" | select FilePath, FileType
-    $result.FilePath = $FilePath
-
-    switch ($machineUint)
-    {
-        0      { $result.FileType = 'Native' }
-        0x014c { $result.FileType = 'i686' } # 32bit
-        0x0200 { $result.FileType = 'Itanium' }
-        0x8664 { $result.FileType = 'x86_64' } # 64bit
-    }
-
-    $stream.Close()
-    $result
-}
-
 function ExtractGitFromFile {
     $stripped = .\mpv --no-config | select-string "mpv" | select-object -First 1
     $pattern = "-g([a-z0-9-]{7})"
@@ -319,7 +290,7 @@ function Upgrade-Mpv {
 
     if (Check-Mpv) {
         $channel = Check-ChannelRelease
-        $file_arch = (Get-Arch).FileType
+        $file_arch = "x86_64"
         $arch = Check-Arch $file_arch
         $remoteName, $download_link = Get-Latest-Mpv $arch $channel
         $localgit = ExtractGitFromFile
